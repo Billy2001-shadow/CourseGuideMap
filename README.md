@@ -1,8 +1,8 @@
 # CourseGuideMap
 本项目是基于Bekerley的CourseMap二次开发 https://github.com/compserv/hknweb/wiki/Course-Map
-#使用说明
+# 使用说明
 本项目分为两部分：课程拓扑表和课程拓扑图  
-##课程拓扑表
+## 课程拓扑表
 下载此项目，打开index.html则为课程拓扑表。  
 <img src="./img/form.png">
 课程拓扑表用于记录课程的信息以及课程之间的关系。   
@@ -12,7 +12,7 @@
 <img src="./img/update.png">  
 修改完成后，点击更新按钮更新课程信息。若放弃修改，则点击取消按钮。  
 输入完课程信息后，点击查看示例可以跳转到课程拓扑图页面。
-##课程拓扑图
+## 课程拓扑图
 <img src="./img/map.png">    
 课程拓扑图上方会显示课程的种类。下方则会显示课程学期以及课程与课程之间的关系。  
 <img src="./img/demo.png">   
