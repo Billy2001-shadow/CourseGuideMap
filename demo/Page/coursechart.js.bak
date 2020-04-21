@@ -1,0 +1,519 @@
+var OPACITY_DURATION = 500;
+var DEFAULT_HEIGHT = 4000;
+var generateChart = function(info, loc, department_id) {
+    var nodes = [];
+    var prereqs = [];
+    var classHash = {};
+    var type_ids = []
+    var types = {}
+    var max_depth = 0;
+    var h = DEFAULT_HEIGHT;
+    //var w = loc.parent().width();
+    var w = 3000;
+    var NODE_RADIUS = 40;
+    var LEGEND_OFFSET = 0*NODE_RADIUS;
+    loc = loc[0];
+    // @Sheng truncate names and add linebreaks
+    var max_linebreaks = 0;
+    var prettyNodeText = function(str) {
+        var linebreaks = 0;
+        if(str.length > 4) {
+            if(str.length <= 8) {
+                var linewidth = 4;
+            } else {
+                var linewidth = Math.ceil(Math.sqrt(str.length));
+            }
+            for(var i = (Math.ceil(str.length / linewidth) - 1) * linewidth; i > 0; i -= linewidth) {
+                // @Sheng however d3.js do not support linebreaks
+                str = str.slice(0, i) + "\n" + str.slice(i);
+                ++linebreaks;
+            }
+        }
+        max_linebreaks = Math.max(max_linebreaks, linebreaks);
+        return str;
+    }
+    var prettyNodeRadius = function(str) {
+        if(str.indexOf("\n") > 0)
+            NODE_RADIUS = Math.max(NODE_RADIUS, 10 * str.indexOf("\n"))
+        return NODE_RADIUS;
+    }
+
+    // @Sheng add background meta
+    var groupedTitle = [
+        "大一(秋)",
+        "大一(春)",
+        "大二(夏)",
+        "大二(秋)",
+        "大二(春)",
+        "大三(夏)",
+        "大三(秋)",
+        "大三(春)",
+        "大四(夏)",
+        "大四(秋)",
+        "大四(春)"
+    ];
+
+    var sem2int = function(semester) {
+        return groupedTitle.indexOf(semester);
+    };
+
+    var addClass = function(course) {
+        if(type_ids.indexOf(course.type_id) < 0) {
+            type_ids.push(course.type_id);
+        }
+        max_depth = course.depth > max_depth ? course.depth : max_depth;
+        if(course.bias_x === undefined || course.bias_x === null) {
+            course.bias_x = 0;
+        }
+        if(course.bias_y === undefined || course.bias_y === null) {
+            course.bias_y = 0;
+        }
+        if(course.link === undefined || course.link === null) {
+            course.link = "<%= Rails.application.routes.url_helpers.root_path %>";
+        }
+        prereq = course.prereqs;
+        if(prereq === undefined || prereq === null)
+            prereq = [];
+        newclass = {
+            id: course.id,
+            name: prettyNodeText(course.name),
+            type: course.type_id,
+            radius: prettyNodeRadius(prettyNodeText(course.name)) * 2,
+            depth: sem2int(course.semester),
+            prereqs: course.prereqs,
+            link: course.link,
+            bias_x: course.bias_x,
+            bias_y: course.bias_y,
+            //y: course.startY,
+            y: DEFAULT_HEIGHT * (0.055 + course.depth * 0.06),
+            x: w / 2 + Math.random(),
+            credit: course.credit
+        };
+        nodes.push(newclass);
+        classHash[course.id] = newclass;
+    };
+
+    var course_data;
+    if(department_id == 2) {
+        course_data = info.cs_courses;
+    } else if (department_id == 1) {
+        course_data = info.ee_courses;
+    }
+    for(var i = 0; i < course_data.length; i++) {
+        addClass(course_data[i]);
+    }
+
+    // generate link array
+    nodes.forEach(function(node) {
+        // console.log("("+node.x+", "+node.y+")");
+        node.prereqs.forEach(function(prereq) {
+            if(!(classHash[prereq.prereq_id] === undefined)) {
+            prereqs.push({source: classHash[prereq.prereq_id], target: node, recommended: prereq.is_recommended});
+            }
+        });
+    });
+        
+    // generate class type information
+    type_ids.forEach(function(type_id) {
+        types[type_id] = info.types.filter(function(type) {
+            return type.id == type_id;
+        })[0];
+    });
+
+    // create svg object
+    var svg = d3.select(loc)
+    .append("svg")
+    .attr("height",h)
+        .attr("width", w);
+
+    // @Sheng render background
+    for(i in groupedTitle) {
+        var thisX = w * 0.01,
+            thisY = DEFAULT_HEIGHT * (0.055 + i * 0.06),
+            thisHeight = DEFAULT_HEIGHT * 0.05,
+            fontSize = Math.ceil(Math.log(w)) * 5;
+
+        svg.append("rect")
+            .attr("class", "bg_shadow")
+            .attr("x", thisX)
+            .attr("y", thisY)
+            .attr("width", w * 0.98)
+            .attr("height", thisHeight)
+            .attr("fill", "#EEEEEE")
+            .attr("rx", w * 0.005);
+
+        svg.append("text")
+            .attr("x", thisX)
+            .attr("y", thisY + thisHeight / 2)
+            .style("font-size", fontSize + "pt")
+            .text(groupedTitle[i]);
+    }
+
+    // create force
+    var force = d3.layout.force()
+    .nodes(nodes)
+    .charge(-10)
+    .linkDistance(function(link) {
+        if(link.source.type == link.target.type) {
+            return 50;
+        } else {
+            return 300;
+        }
+    })
+    .alpha(0.01)
+    .size([w,h]);
+
+    // gets the base class for a given edge object (either edge recommended or edge required)
+    var getBaseEdge = function(prereq) {
+        var base = "edge";
+        if(prereq.recommended) {
+            base += " recommended";
+        } else {
+            base += " required" ;
+        }
+        return base;
+    };
+    var legendMouseOver = function(d) {
+        circle.attr("class", function(course) {
+            if(course.type == d.id) { // TODO: make sure this is right
+                return "course highlight";
+            }
+        });
+    };
+
+    // function that gets called when a node is moused over
+    var classMouseOver = function(d) {
+        var prereqs = [];
+        var post = []; // classes that have d as a prereq
+        var totalCredit = 0; // @Sheng calculates total score
+        var visited = [];
+        var traverse = function(node) {
+            prereqs.push(node.id);
+            if(visited.indexOf(node.name) < 0) {
+                totalCredit += (node.credit === undefined ? 0 : +node.credit);
+                visited.push(node.name);
+            }
+            node.prereqs.forEach(function(p) {
+                traverse(classHash[p.prereq_id]);
+            });
+        };
+        traverse(d);
+
+        if(d3.select('#credit_' + d.id)[0][0] == null) { // @Sheng render total credits
+            var textX = d.x - NODE_RADIUS*0.5, textY = d.y + NODE_RADIUS * 1.4;
+
+            svg.append("text").attr({
+                id: "credit_" + d.id,
+                x: function() { return textX; },
+                y: function() { return textY; }
+            }).text(function() { return "total credits: " + totalCredit; });
+
+            var rect = d3.selectAll("[id^=credit]")[0][0].getBoundingClientRect();
+            var rectWidth = function() { return rect.width * 1.1; }, rectHeight = function() { return rect.height * 1.1; },
+                rectX = function() { return textX - ((rectWidth() - rect.width) > 0 ? (rectWidth() - rect.width) / 2 : 0); },  // @Sheng make background center-aligned
+                rectY = function() { return textY - rectHeight() * 0.8; };
+
+            svg.insert("rect", "#credit_" + d.id).attr({
+                id: "creditbg_" + d.id,
+                x: rectX,
+                y: rectY,
+                width: rectWidth,
+                height: rectHeight,
+                fill: "white",
+                opacity: "0.93"
+            })
+        }
+
+        nodes.forEach(function(node) {
+            node.prereqs.forEach(function(prereq) {
+                if(prereq.prereq_id == d.id) {
+                    post.push(node.id);
+                }
+            });
+        });
+        edges.attr("class", function(prereq) {
+            var base = getBaseEdge(prereq);
+            if(prereqs.indexOf(prereq.target.id) > -1) {
+                base += " prereq";
+            }
+            if(prereqs.indexOf(prereq.target.id) > -1 || (post.indexOf(prereq.target.id) > -1 && prereq.source.id == d.id)) {
+                base += " highlight";
+            }
+            if(post.indexOf(prereq.target.id) > -1 && prereq.source.id == d.id) {
+                base += " post";
+            }
+            return base;
+
+        });
+        edges.transition().attr("opacity", function(prereq) {
+            if(prereqs.indexOf(prereq.target.id) > -1 || (post.indexOf(prereq.target.id) > -1 && prereq.source.id == d.id)) {
+                return 1;
+            }
+            return 0.2;
+        }).duration(OPACITY_DURATION);
+
+        circle.attr("class", function(prereq) {
+            var base= "course";
+            if(prereqs.indexOf(prereq.id) > -1 || post.indexOf(prereq.id) > -1) {
+                base += " highlight";
+            }
+            if(prereqs.indexOf(prereq.id) > -1 || post.indexOf(prereq.id) > -1) {
+                base += " prereq";
+            }
+            return base;
+        });
+        circle.transition().attr("opacity", function(prereq) {
+            if(prereqs.indexOf(prereq.id) > -1 || post.indexOf(prereq.id) > -1) {
+                return 1;
+            }
+            return 0.2;
+        }).duration(OPACITY_DURATION);
+
+        texts.transition().attr("opacity", function(prereq) {
+            if(prereqs.indexOf(prereq.id) > -1 || post.indexOf(prereq.id) > -1) {
+                return 1;
+            }
+            return 0.2;
+        }).duration(OPACITY_DURATION);
+    };
+    //
+    // function called when a course is moused off
+    var classMouseOff = function(d) {
+        edges.transition().attr("opacity", 1).duration(OPACITY_DURATION);
+        //TODO: distinguish between recommended and required
+        edges.attr("class", getBaseEdge);
+        texts.transition().attr("opacity", 1.0).duration(OPACITY_DURATION);
+        circle.attr("class", "course");
+        circle.transition().attr("opacity", 1.0).duration(OPACITY_DURATION);
+
+        // @Sheng removes credit text
+        d3.select("#credit_" + d.id).remove();
+        d3.select("#creditbg_" + d.id).remove();
+    };
+
+    // function called when node is clicked
+    var classClick = function(d) {
+        if (d3.event.defaultPrevented) return;
+        window.open(d.link, '_blank');
+    };
+
+    // draw edges
+    var edges = svg.selectAll("line")
+    .data(prereqs)
+    .enter()
+    .append("line")
+    // TODO: recommneded/required difference
+    .attr("class", getBaseEdge)
+    .attr("marker-end", "url(#end)");
+    // draw arrows
+    svg.append("svg:defs")
+    .selectAll("marker")
+    .data(["end"])
+    .enter().append("svg:marker")
+    .attr("id", String)
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 0)
+    .attr("refY", 0)
+    .attr("markerWidth", 8)
+    .attr("markerHeight", 8)
+    .attr("markerUnits", "userSpaceOnUse")
+    .attr("orient", "auto")
+    .append("svg:path")
+    .attr("d", "M0,-5L10,0L0,5");
+
+    // draw nodes
+    var nodeGroups = svg.selectAll("g.nodes")
+    .data(nodes)
+    .enter()
+    .append("g")
+    .attr("class", "nodes")
+    .on("mouseover", classMouseOver)
+    .on("mouseleave", classMouseOff)
+    .on("click", classClick);
+    var circle = nodeGroups
+    .append("circle")
+    .attr("r", NODE_RADIUS)
+    .attr("class", "course")
+    .attr("opacity", 1.0)
+    .attr("id", function(d) { return d.name; })
+    .style("fill", function(d) { return types[d.type].color; });
+
+    // @Sheng not rendering here, use <tspan> to display multiple lines
+    var texts = nodeGroups
+    .append("text")
+    .attr("class", "courseNames")
+    .attr("id", function(d) { return d.name; })
+    .attr("text-anchor", "middle")
+    .attr("y", function(d) { return d.name.split("\n").length > 1 ? (-12 * (d.name.split("\n").length - 0.5)) : (-12); });
+
+    for(var a = 0; a <= max_linebreaks; a++) {
+        texts.append("tspan")
+            .attr("x", 0)
+            .attr("dy",  "1.2em")
+            .text(function(d) { return d.name.split('\n')[a]; });
+    }
+
+    // draw the legend for colors
+    var categories = [];
+    type_ids.forEach(function(key, index) {
+        categories.push({id: key, name: types[key].name, index: index, color: types[key].color});
+    });
+    var colorLegend = svg.selectAll("circle.colorLegend")
+    .data(categories)
+    .enter()
+    .append("circle")
+        .attr("class", "colorLegend")
+        .attr("cx", function (d) { return (w - 3 * NODE_RADIUS) * d.index / (categories.length) + NODE_RADIUS * 3; })
+    .attr("cy", NODE_RADIUS+5)
+    .attr("r", NODE_RADIUS)
+    .on("mouseover", legendMouseOver)
+    .on("mouseout", classMouseOff)
+    .style("fill", function(d) { return d.color; });
+
+    var colorText = svg.selectAll("text.textLegend")
+    .data(categories)
+    .enter()
+    .append("text")
+    .attr("class", "legendText")
+    .attr("x", function(d) { return (w-3*NODE_RADIUS)*d.index/(categories.length) + NODE_RADIUS * 3; })
+    .attr("y", 3*NODE_RADIUS)
+    .attr("text-anchor", "middle")
+    .text(function(d) { return d.name;});
+
+    // draw the legend for arrows
+    var arrowLegend = svg.selectAll('g.arrowLegend').data([{ name: "Recommended", "stroke-dasharray": "5, 5"}, {name: "Required", "stroke-dasharray": null}])
+    .enter()
+    .append('g')
+    .attr("x", w-100)
+    .attr("y", 25)
+    .attr("height", 50)
+    .attr("width", 100)
+    .each(function(d, i) {
+        var g = d3.select(this);
+        g.append("text")
+        .attr("class", "legendText")
+        .attr("x", w-80)
+        .attr("y", h-i*25)
+        .attr("text-anchor", "end")
+        .text(d.name);
+        g.append("line")
+        .attr("class", "highlight")
+        .style("stroke-dasharray", d["stroke-dasharray"])
+        .attr("x1", w-70)
+        .attr("y1", h-i*25-4)
+        .attr("x2", w-30)
+        .attr("y2", h-i*25-4)
+        .attr("marker-end", "url(#end)");
+    });
+
+    // turn on force
+    force.on("tick", function(e) {
+        edges.each(function(d) {
+            var x1 = d.source.x;
+            var y1 = d.source.y;
+            var x2 = d.target.x;
+            var y2 = d.target.y;
+            // make arrows end at edge rather than center
+            var angle = Math.atan(Math.abs((y2-y1)/(x2-x1)));
+            x2 += (x1 < x2 ? -1 : 1) * (NODE_RADIUS+9)*Math.cos(angle);
+            y2 += (y1 < y2 ? -1 : 1) * (NODE_RADIUS+9)*Math.sin(angle);
+            d3.select(this).attr({
+                'x1': x1,
+                'y1': y1,
+                'x2': x2,
+                'y2': y2,
+            });
+        });
+
+        var k = 0.1 * e.alpha;
+        var offset = 0;
+
+        nodes.forEach(function(o,i) {
+            var charth = h; // amount of space to draw on not including the legend
+            var targety = 0;
+            var targetx = 0;
+            targetx += w / 2;
+            targety += charth*types[o.type].chart_pref_y * 2;
+            targety += (o.depth - 1) * charth / (max_depth - 1);
+            targetx += o.bias_x + w * 0.1;
+            targety += o.bias_y;
+            targety += LEGEND_OFFSET + 4*NODE_RADIUS;
+
+            o.x += (targetx-o.x)*k;
+
+            // @Sheng make all elements of same depth in a line
+            o.y = o.depth * DEFAULT_HEIGHT * 0.06+ DEFAULT_HEIGHT * 0.08;
+
+            circle.attr("cx", function(d) {
+                return d.x;
+            })
+            .attr("cy", function(d) {
+                return d.y;
+            });
+            texts.attr("transform", function(d) {
+                return "translate(" + d.x + "," + d.y + ")";
+            });
+        });
+
+        //collision
+        var collide = function(node) {
+            var r = node.radius;
+            nx1 = node.x - r;
+            nx2 = node.x + r;
+            ny1 = node.y - r;
+            ny2 = node.y + r;
+            return function(quad, x1, y1, x2, y2) {
+                if (quad.point && (quad.point !== node)) {
+                    var x = node.x - quad.point.x,
+                    y = node.y - quad.point.y,
+                    l = Math.sqrt(x * x + y * y),
+                    r = node.radius + quad.point.radius;
+                    if (l < r) {
+                        l = (l - r) / l * 0.5;
+                        node.x -= x *= l;
+                        node.y -= y *= l;
+                        quad.point.x += x;
+                        quad.point.y += y;
+                    }
+                }
+                return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+            };
+        };
+        var q = d3.geom.quadtree(nodes),
+        j = 0,
+        n = nodes.length;
+        while (++j < n) {
+            q.visit(collide(nodes[j]));
+        }
+        svg.selectAll("circle.course")
+        .attr("cx", function(d) { return d.x; })
+        .attr("cy", function(d) { return d.y; });
+
+    });
+    var done = false;
+    force.on("end", function() {
+        done = true;
+        force.stop();
+
+        var nodeData = []
+        nodes.forEach(function(node) {
+            var data = {"id": node.id, "startX": node.x, "startY": node.y};
+            nodeData.push(data);
+        });
+    });
+    force.on("start", function() {
+        while(!done) {
+            var ticks = 10;
+            requestAnimationFrame(function render() {
+                for (var i = 0; i < ticks; i++) {
+                    force.tick();
+                }
+                if (force.alpha() > 0) {
+                    requestAnimationFrame(render);
+                }
+            })
+        // force.tick();
+        }
+    });
+    force.start();
+};

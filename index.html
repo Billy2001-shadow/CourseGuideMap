@@ -1,0 +1,442 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta http-equiv="Access-Control-Allow-Origin" content="*" />
+		<script src="./js/vue.js"></script>
+		<title>课程拓扑表</title>
+		<link rel="stylesheet" media="all" href="./css/style.css">
+		<script src="./js/jquery-3.4.1.js"></script>
+		<script src="./js/jquery-ui.min.js"></script>
+		<script src="./js/jquery-ui-timepicker-addon.min.js"></script>
+		<script src="./js/FileSaver.js"></script>
+	</head>
+
+	<body>
+		<div id="table">
+			<div class="add">
+				<input type="text" id="input" v-model="addDetail.name" name="name" value="" placeholder="课程名" />
+				<input type="text" id="input" v-model="addDetail.type" name="type" value="" placeholder="课程类别" />
+
+				<input list="source" id="input" v-model="addDetail.semester" name="semester" placeholder="修读学期">
+				<datalist id="source">
+				    <option value="大一(秋)"></option>
+				    <option value="大一(春)"></option>
+				    <option value="大二(夏)"></option>
+				    <option value="大二(秋)"></option>
+				    <option value="大二(春)"></option>
+					<option value="大三(夏)"></option>
+				    <option value="大三(秋)"></option>
+				    <option value="大三(春)"></option>
+					<option value="大四(夏)"></option>
+				    <option value="大四(秋)"></option>
+				    <option value="大四(春)"></option>
+				</datalist>
+
+				<input type="text" id="input" v-model="addDetail.prereqs" name="prereqs" value="" placeholder="前驱课程号" />
+
+				<input list="source1" id="input" v-model="addDetail.required" name="required" value="" placeholder="是否必修"/>
+				<datalist id="source1">
+				    <option value="是"></option>
+				    <option value="否"></option>
+				</datalist>
+				<input type="text" id="input" v-model="addDetail.credit" name="credit" value="" placeholder="课程学分" />
+				<button @click="adddetail">新增</button>
+				&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                <button @click="showDemo">查看示例</button>
+				<!--button @click="saveForm">下载示例</button-->
+			</div>
+
+			<table cellpadding="0" cellspacing="0">
+				<thead>
+					<tr>
+						<th>课程号</th>
+						<th>课程名</th>
+						<th>课程类别</th>
+						<th>修读学期</th>
+						<th>前驱课程号</th>
+						<th>是否必修</th>
+						<th>课程学分</th>
+						<th>操作</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr v-for="(item,index) in newsList">
+						<td width="5%">{{index}}</td>
+						<td>{{item.name}}</td>
+						<td width="10%">{{item.type}}</td>
+						<td width="15%">{{item.semester}}</td>
+						<td width="15%">{{item.prereqs}}</td>
+						<td width="15%">{{item.required}}</td>
+						<td width="15%">{{item.credit}}</td>
+						<td width="10%"><!--span @click="deletelist(item.id,index)" class="delete">删除</span--><span class="edit" @click="edit(item)">编辑</span></td>
+					</tr>
+				</tbody>
+			</table>
+
+			<div id="mask" v-if="editlist">
+				<div class="mask">
+		
+					<div class="title">
+						编辑
+					</div>
+
+					<div class="content">
+						<input type="text" id="input" v-model="editDetail.name" name="name" value="" placeholder="课程名" />
+						<input type="text" id="input" v-model="editDetail.type" name="type" value="" placeholder="课程类别" />
+
+						<input list="source2" id="input" v-model="editDetail.semester" name="semester" value="" placeholder="修读学期">
+						<datalist id="source2">
+						    <option value="大一(秋)"></option>
+						    <option value="大一(春)"></option>
+							<option value="大二(夏)"></option>
+						    <option value="大二(秋)"></option>
+						    <option value="大二(春)"></option>
+							<option value="大三(夏)"></option>
+						    <option value="大三(秋)"></option>
+						    <option value="大三(春)"></option>
+							<option value="大四(夏)"></option>
+						    <option value="大四(秋)"></option>
+						    <option value="大四(春)"></option>
+						</datalist>
+
+						<input type="text" id="input" v-model="editDetail.prereqs" name="prereqs" value="" placeholder="前驱课程号" />
+
+						<input list="source3" id="input" v-model="editDetail.required" name="required" value="" placeholder="是否必修"/>
+						<datalist id="source3">
+						    <option value="是"></option>
+						    <option value="否"></option>
+						</datalist>
+
+						<input type="text" id="input" v-model="editDetail.credit" name="credit" value="" placeholder="课程学分" />
+
+						<button @click="update">更新</button>
+						<button @click="editlist=false">取消</button>
+					</div>
+				</div>
+			</div>
+
+		</div>
+
+		<script>
+			var app = new Vue({
+				el: '#table',
+				data: {
+					addDetail: {},
+					editlist: false,
+					editDetail: {},
+					newsList: [],
+					editid:''
+				},
+
+				created(){
+					//window.onload = function() {
+						//ajax跨域访问、 JQuery的跨域方法
+						//$.getJSON('./chartinfo.json',function(data){ 
+						//	console.log('数据加载成功')
+							//console.log(app.$data.newsList)
+							//把info.json里的数据赋值给newsList
+						//	var TnewList=[];
+						//	for(var i=0;i<data.ee_courses.length;i++){
+						//		var prereqs="", required;
+						//		var t;
+						//		t=data.ee_courses.prereqs
+/* 								if(data.ee_courses[i].prereqs.length==0)
+									required="是"
+								for(var j=0;j<data.ee_courses[i].prereqs.length;j++){
+									if(data.ee_courses[i].prereqs[j].is_recommended==false)
+										required="是"
+									else
+										required="否"
+
+									prereqs+=data.ee_courses[i].prereqs[j].prereq_id
+									if(j!=data.ee_courses[i].prereqs.length-1)
+										prereqs+=","
+								}
+								
+								TnewList.push({"name":data.ee_courses[i].name,
+								"type":data.types[data.ee_courses[i].type_id].name,
+								"semester":data.ee_courses[i].semester,
+								"prereqs":prereqs,
+								"required":required,
+								"credit":data.ee_courses[i].credit,
+								"id": Math.floor(Math.random()*1000000+1)})
+							}
+							app.$data.newsList=TnewList
+							console.log(app.$data.newsList)
+							//if(app.$data.newsList[2].precursor=="")
+								//console.log("1")
+							//console.log(app.$data.newsList[2].precursor.length)
+						});
+					}; */
+				},
+				mounted() {
+
+				},
+				methods: {
+
+					//新增
+					adddetail() {
+						//这里的思路应该是把this.addDetail传给服务端，然后加载列表this.newsList
+						//this.newsList.push(this.addDetail)
+						this.newsList.push({
+							name: this.addDetail.name,
+							type: this.addDetail.type,
+							semester: this.addDetail.semester,
+							prereqs: this.addDetail.prereqs,
+							required: this.addDetail.required,
+							credit: this.addDetail.credit,
+							id:Math.floor(Math.random()*1000000+1)
+						})
+
+						//var content = JSON.stringify(app.$data.newsList);
+						//var blob = new Blob([content], {type: "text/plain;charset=utf-8"});
+						//saveAs(blob, "save.json");
+
+						//axios.post('url',this.addDetail).then((res) =>{
+						//若返回正确结果，清空新增输入框的数据
+						//this.addDetail.title = ""
+						//this.addDetail.user = ""
+						//this.addDetail.dates = ""
+						//})
+
+					},
+					//删除
+					deletelist(id, i) {
+						this.newsList.splice(i, 1);
+						//这边可以传id给服务端进行删除  ID = id
+						//axios.get('url',{ID:id}).then((res) =>{
+						//			加载列表				
+						//})
+					},
+					//编辑
+					edit(item) {
+						//console.log(item)
+						this.editDetail = {
+							name: item.name,
+							type: item.type,
+							semester: item.semester,
+							prereqs: item.prereqs,
+							required: item.required,
+							credit: item.credit,
+							id: item.id
+						}
+						this.editlist = true
+						this.editid = item.id
+					},
+					//确认更新
+					update() {
+						//编辑的话，也是传id去服务端
+						//axios.get('url',{ID:id}).then((res) =>{
+						//			加载列表				
+						//})
+						let _this= this
+						for(let i = 0; i < _this.newsList.length; i++) {
+							if(_this.newsList[i].id ==this.editid) {
+								_this.newsList[i] = {
+									name: _this.editDetail.name,
+									type: _this.editDetail.type,
+									semester: _this.editDetail.semester,
+									prereqs: _this.editDetail.prereqs,
+									required: _this.editDetail.required,
+									credit: _this.editDetail.credit,
+									id: this.editid
+								}
+								this.editlist = false
+							}
+						}
+					},
+					//保存数据
+					saveForm() {
+						//先遍历newList的数据，确定有多少个学科种类。
+						var typeName=[];
+						var types=[];
+						var i=j=0;
+						if(app.newsList.length!=0){
+							typeName[j]=app.newsList[i].type;
+							i++;
+							j++;
+						}
+						for(i,j;i<app.newsList.length;i++){
+							if(typeName.indexOf(app.newsList[i].type)<=-1){
+								typeName[j]=app.newsList[i].type;
+								j++
+							}
+						}
+						//console.log(typeName)
+						//返回学科下标
+						//console.log(typeName.indexOf("专业必修课"))
+
+						//处理学科种类，导入学科种类
+						var chart_pref_y;
+						for(var typeID=0;typeID<typeName.length;typeID++){
+							if(typeID==0)
+								chart_pref_y=0.1
+							else
+								chart_pref_y=0
+							var typeColor=["#E57373","#FFF176","#80CBC4","#90CAF9","#CE93D8","#9FA8DA","#80DEEA","#FFCC80","#E0E0E0"]
+							var chart_pref_x=[0.5,0.2,0.3,0.4,0.6,0.7,0.8,0.9,1.0]
+							types.push({"id":typeID,"chart_pref_x":chart_pref_x[typeID],"chart_pref_y":chart_pref_y,"color":typeColor[typeID],"name":typeName[typeID]})
+						}
+						//console.log(types)
+
+						//具体课程
+						var ee_courses=[];
+						var edgeId=0;
+						for(i=0;i<app.newsList.length;i++)
+						{
+							var depth=typeName.indexOf(app.newsList[i].type);
+							var prereqs=[];
+							if(app.newsList[i].prereqs!=""){
+								var is_recommended=true;
+								depth=depth+0.2;
+								if(app.newsList[i].required=="是")
+                                    is_recommended=false;
+                                if(app.newsList[i].prereqs!=null)
+                                {
+                                    var preID=app.newsList[i].prereqs.split(",");
+                                    console.log(preID)
+                                    for(j=0;j<preID.length;j++)
+                                    {
+                                        prereqs.push({
+                                            "id":edgeId,
+                                            "course_id":i,
+                                            "prereq_id":parseInt(preID[j]),
+                                            "is_recommended":is_recommended 
+                                        })
+                                        edgeId++;
+                                    }
+                                }
+							}
+							//console.log(prereqs)
+							
+							ee_courses.push({
+											"id":i,
+											"department_id": 1,
+											"name":app.newsList[i].name,
+											"link":"/coursesurveys/course/CS/61B",
+											"prereqs": prereqs,
+											"type_id": typeName.indexOf(app.newsList[i].type),
+											"bias_x": 0,
+											"bias_y": 0,
+											"depth": depth,
+											"startX": 0,
+											"startY": 0,
+											"credit": parseFloat(app.newsList[i].credit),
+											"semester": app.newsList[i].semester
+											})
+						}
+
+						var form={"types":types,"ee_courses":ee_courses};
+						console.log(form);
+						var blob = new Blob([JSON.stringify(form)], { type: "text/plain;charset=utf-8" });
+						//saveAs(blob, "chartinfo.json");
+
+						$.ajax({ 
+							type : "POST", 
+							url : '../download', 
+							data : JSON.stringify(form), 
+							contentType : "application/json", 
+							dataType : "json", 
+							complete:function(data) { 
+								window.location = '../download/courseguide.zip';
+							} 
+						});
+					},
+
+                    //查看拓扑图示例
+                    showDemo(){
+                        //先遍历newList的数据，确定有多少个学科种类。
+						var typeName=[];
+						var types=[];
+						var i=j=0;
+						if(app.newsList.length!=0){
+							typeName[j]=app.newsList[i].type;
+							i++;
+							j++;
+						}
+						for(i,j;i<app.newsList.length;i++){
+							if(typeName.indexOf(app.newsList[i].type)<=-1){
+								typeName[j]=app.newsList[i].type;
+								j++
+							}
+						}
+						//console.log(typeName)
+						//返回学科下标
+						//console.log(typeName.indexOf("专业必修课"))
+
+						//处理学科种类，导入学科种类
+						var chart_pref_y;
+						for(var typeID=0;typeID<typeName.length;typeID++){
+							if(typeID==0)
+								chart_pref_y=0.1
+							else
+								chart_pref_y=0
+							var typeColor=["#E57373","#FFF176","#80CBC4","#90CAF9","#CE93D8","#9FA8DA","#80DEEA","#FFCC80","#E0E0E0"]
+							var chart_pref_x=[0.5,0.2,0.3,0.4,0.6,0.7,0.8,0.9,1.0]
+							types.push({"id":typeID,"chart_pref_x":chart_pref_x[typeID],"chart_pref_y":chart_pref_y,"color":typeColor[typeID],"name":typeName[typeID]})
+						}
+						//console.log(types)
+
+						//具体课程
+						var ee_courses=[];
+						var edgeId=0;
+						for(i=0;i<app.newsList.length;i++)
+						{
+							var depth=typeName.indexOf(app.newsList[i].type);
+							var prereqs=[];
+							if(app.newsList[i].prereqs!=""){
+								var is_recommended=true;
+								depth=depth+0.2;
+								if(app.newsList[i].required=="是")
+                                    is_recommended=false;
+                                if (app.newsList[i].prereqs!=null)
+                                {
+								    var preID=app.newsList[i].prereqs.split(",");
+                                    for(j=0;j<preID.length;j++)
+                                    {
+                                        prereqs.push({
+                                            "id":edgeId,
+                                            "course_id":i,
+                                            "prereq_id":parseInt(preID[j]),
+                                            "is_recommended":is_recommended 
+                                        })
+                                        edgeId++;
+                                    }
+                                }
+							}
+							//console.log(prereqs)
+							
+							ee_courses.push({
+											"id":i,
+											"department_id": 1,
+											"name":app.newsList[i].name,
+											"link":"/coursesurveys/course/CS/61B",
+											"prereqs": prereqs,
+											"type_id": typeName.indexOf(app.newsList[i].type),
+											"bias_x": 0,
+											"bias_y": 0,
+											"depth": depth,
+											"startX": 0,
+											"startY": 0,
+											"credit": parseFloat(app.newsList[i].credit),
+											"semester": app.newsList[i].semester
+											})
+						}
+
+						var form={"types":types,"ee_courses":ee_courses};
+						var blob = new Blob([JSON.stringify(form)], { type: "text/plain;charset=utf-8" });
+
+                        console.log("showDemo")
+                        console.log(form)
+                        window.open("./demo/index.html","_blank");
+                        localStorage.setItem('form', JSON.stringify(form));
+                    }
+				}
+				})
+		</script>
+	</body>
+
+</html>
+
