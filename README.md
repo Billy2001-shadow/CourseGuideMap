@@ -1,5 +1,5 @@
 # CourseGuideMap
-本项目是基于Bekerley的CourseMap二次开发 https://github.com/compserv/hknweb/wiki/Course-Map
+本项目是基于Bekerley的CourseMap进行二次开发。 https://github.com/compserv/hknweb/wiki/Course-Map
 # 使用说明
 本项目分为两部分：课程拓扑表和课程拓扑图  
 ## 课程拓扑表
